@@ -27,9 +27,9 @@
     tools/make_smoke_fixtures.ps1
     build/bin/kirakara_show_unified_native_smoke.exe `
         "$env:TEMP\kira_fixtures\v1.mp4" "$env:TEMP\kira_fixtures\l1.krl" `
-        "$env:TEMP\kira_fixtures\vocal1.wav" "$env:TEMP\kira_fixtures\inst1.wav" `
+        "$env:TEMP\kira_fixtures\vocal1.m4a" "$env:TEMP\kira_fixtures\inst1.m4a" `
         "$env:TEMP\kira_fixtures\v2.mp4" "$env:TEMP\kira_fixtures\l2.krl" `
-        "$env:TEMP\kira_fixtures\vocal2.wav" "$env:TEMP\kira_fixtures\inst2.wav" `
+        "$env:TEMP\kira_fixtures\vocal2.m4a" "$env:TEMP\kira_fixtures\inst2.m4a" `
         --texture-only --soak-seconds=8 --stage-diagnostics
 #>
 [CmdletBinding()]
@@ -71,19 +71,19 @@ foreach ($video in $videos) {
 }
 
 # Separate vocal and accompaniment tracks, matching how the App hands catalog
-# audio to the host. PCM keeps decoding out of the picture.
+# audio to the host. AAC exercises the supported audio decoder.
 $audios = @(
-    @{ name = 'vocal1.wav'; frequency = 440 },
-    @{ name = 'inst1.wav';  frequency = 220 },
-    @{ name = 'vocal2.wav'; frequency = 330 },
-    @{ name = 'inst2.wav';  frequency = 165 }
+    @{ name = 'vocal1.m4a'; frequency = 440 },
+    @{ name = 'inst1.m4a';  frequency = 220 },
+    @{ name = 'vocal2.m4a'; frequency = 330 },
+    @{ name = 'inst2.m4a';  frequency = 165 }
 )
 foreach ($audio in $audios) {
     $path = Join-Path $OutputDirectory $audio.name
     Write-Host "make_smoke_fixtures: $($audio.name)"
     & $Ffmpeg -y -v error -f lavfi `
         -i "sine=frequency=$($audio.frequency):sample_rate=44100:duration=$Seconds" `
-        -ac 2 -c:a pcm_s16le $path
+        -ac 2 -c:a aac -b:a 160k $path
     if ($LASTEXITCODE -ne 0) { Write-Error "ffmpeg failed for $($audio.name)" }
 }
 
@@ -95,12 +95,12 @@ foreach ($index in 1, 2) {
 $media = @(
     (Join-Path $OutputDirectory 'v1.mp4'),
     (Join-Path $OutputDirectory 'l1.krl'),
-    (Join-Path $OutputDirectory 'vocal1.wav'),
-    (Join-Path $OutputDirectory 'inst1.wav'),
+    (Join-Path $OutputDirectory 'vocal1.m4a'),
+    (Join-Path $OutputDirectory 'inst1.m4a'),
     (Join-Path $OutputDirectory 'v2.mp4'),
     (Join-Path $OutputDirectory 'l2.krl'),
-    (Join-Path $OutputDirectory 'vocal2.wav'),
-    (Join-Path $OutputDirectory 'inst2.wav')
+    (Join-Path $OutputDirectory 'vocal2.m4a'),
+    (Join-Path $OutputDirectory 'inst2.m4a')
 )
 $quoted = ($media | ForEach-Object { '"' + $_ + '"' }) -join ' '
 

@@ -9,8 +9,8 @@ Kirakara Show 当前主要面向 Windows 10/11 x64：
 | KRL / LRC 解析 | 可用 |
 | Direct2D 歌词渲染 | 可用 |
 | 视频与字幕合成 | 可用 |
-| H.264 / AV1 / H.265 视频解码 | 统一使用 FFmpeg，默认优先 D3D11VA 硬解；设备或 profile 不支持时回退软件（H.264 Hi10P 通常需软件） |
-| Opus 音频解码 | 可用，支持 Ogg / WebM，转换为立体声浮点 PCM |
+| H.264 / H.265 / VP9 / AV1 视频解码 | 统一使用 FFmpeg，默认优先 D3D11VA 硬解；设备或 profile 不支持时回退软件（H.264 Hi10P 通常需软件） |
+| AAC / Opus 音频解码 | 可用，支持内嵌及外部音轨，转换为立体声浮点 PCM |
 | 实体第二屏 | 可用 |
 | Flutter GPU 预览 | 可用，需要 Kirakara-App 对应接入 |
 | H.264/AAC Cast | FFmpeg 编码；NVENC/AMF/QSV 硬编优先，OpenH264 软件回退，AAC-LC 原生编码 |
@@ -18,9 +18,14 @@ Kirakara Show 当前主要面向 Windows 10/11 x64：
 
 ## 建议测试的媒体
 
-运行 `tools/make_codec_fixtures.ps1` 可生成 H.264/AV1/H.265 的 8/10 位视频、单/双/六声道 Opus，
+解码仅保留 H.264、H.265、VP9、AV1、AAC、Opus；编码仅保留 H.264、AAC。
+容器支持 MP4/MOV、Matroska/WebM、MPEG-TS、Ogg、ADTS AAC、AVI，但其中的音视频必须使用上述编码。
+WAV/PCM、MP3、FLAC 等文件不再支持播放；内部 PCM 重采样、变调及混音继续可用。
+
+运行 `tools/make_codec_fixtures.ps1` 可生成 H.264/AV1/H.265/VP9 的 8/10 位视频、单/双/六声道 Opus，
 以及含中文文件名的 AV1+Opus WebM。该脚本需要带 libaom-av1、libx265、libopus 编码器的
-测试用 FFmpeg（还需要 libx264）；编码工具不随产品分发。重新配置 CMake 后，CTest 会加入真实媒体测试。
+测试用 FFmpeg（还需要 libx264、libvpx-vp9、FLAC 和 MP3 编码器）；编码工具不随产品分发。
+不支持的 PCM/FLAC/MP3 样片用于验证拒绝行为。重新配置 CMake 后，CTest 会加入真实媒体测试。
 可用 `KIRAKARA_CODEC_FIXTURE_DIR` 指定样片目录。测试同时检查软件路径、硬解优先路径、
 BGRA/NV12 GPU 纹理内容、跳转、延迟帧排空、Opus pre-skip 和尾部裁剪。
 宿主测试另行验证 H.264/AV1/H.265 与内嵌 AAC/Opus 的加载、播放、暂停、跳转和自然结束，

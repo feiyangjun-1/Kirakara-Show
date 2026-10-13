@@ -1,54 +1,61 @@
-param([string]$SdkDirectory = (Join-Path $PSScriptRoot '../.deps/ffmpeg-sdk'))
+param(
+    [string]$Python = 'python',
+    [string]$Bash = 'C:/Program Files/Git/bin/bash.exe',
+    [string]$CMakeDirectory = '',
+    [string]$NinjaDirectory = ''
+)
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$sdk = [IO.Path]::GetFullPath($SdkDirectory)
+$deps = Join-Path $repository '.deps'
+$sources = Join-Path $deps 'minimal-sources'
+$sdk = Join-Path $deps 'ffmpeg-minimal-sdk'
 $lockFile = Join-Path $repository 'third_party/ffmpeg/dependency.json'
 $dependency = Get-Content -LiteralPath $lockFile -Raw | ConvertFrom-Json
-$downloads = Join-Path $repository '.deps/ffmpeg-download'
-New-Item -ItemType Directory -Force $downloads, $sdk | Out-Null
-$archive = Join-Path $downloads 'sdk.zip'
-if (!(Test-Path -LiteralPath $archive) -or
-    (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $dependency.archiveSha256) {
-    Invoke-WebRequest $dependency.archiveUrl -OutFile $archive
+New-Item -ItemType Directory -Force $deps, $sources | Out-Null
+function Download([string]$Url, [string]$Path, [string]$Hash) {
+    if (!(Test-Path -LiteralPath $Path) -or
+        (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Hash) {
+        Invoke-WebRequest $Url -OutFile $Path
+    }
+    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Hash) {
+        throw "SHA-256 mismatch: $Path"
+    }
 }
-if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $dependency.archiveSha256) {
-    throw 'FFmpeg SDK SHA-256 mismatch.'
+Download $dependency.toolchain.url (Join-Path $deps 'w64devkit.zip') $dependency.toolchain.sha256
+Download $dependency.runtimeLicense.url (Join-Path $deps 'GCC-COPYING.RUNTIME') $dependency.runtimeLicense.sha256
+if (!(Test-Path (Join-Path $deps 'toolchain/w64devkit/bin/gcc.exe'))) {
+    & $Python (Join-Path $PSScriptRoot 'ffmpeg_source_materials.py') extract-toolchain $repository
+    if ($LASTEXITCODE -ne 0) { throw 'Toolchain extraction failed.' }
 }
-$expanded = Join-Path $downloads 'expanded'
-Expand-Archive -LiteralPath $archive -DestinationPath $expanded -Force
-$package = Join-Path $expanded 'ffmpeg-n8.1.3-18-g46d899d7a0-win64-lgpl-shared-8.1'
-foreach ($directory in @('bin', 'include', 'lib', 'doc')) {
-    Copy-Item -LiteralPath (Join-Path $package $directory) -Destination $sdk -Recurse -Force
+foreach ($source in $dependency.sources) {
+    $archive = Join-Path $sources $source.name
+    # Reuse the previous full SDK's exact source archive when available.
+    $previous = Join-Path $deps "ffmpeg-sdk/third_party/ffmpeg/sources/$($source.name)"
+    if (!(Test-Path $archive) -and (Test-Path $previous)) { Copy-Item $previous $archive }
+    Download $source.url $archive $source.sha256
 }
-Copy-Item -LiteralPath (Join-Path $package 'LICENSE.txt') -Destination $sdk -Force
-$version = & (Join-Path $sdk 'bin/ffmpeg.exe') -version 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0 -or $version -match '--enable-(gpl|nonfree)(\s|$)' -or
-    $version -notmatch '--enable-shared' -or $version -notmatch '--enable-libdav1d') {
-    throw 'Expected LGPL shared FFmpeg with dav1d and without GPL/nonfree components.'
+& $Python (Join-Path $PSScriptRoot 'ffmpeg_source_materials.py') extract $repository
+if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed.' }
+$pythonBuild = Join-Path $deps 'python-build'
+& $Python -m pip install --target $pythonBuild "meson==$($dependency.mesonVersion)"
+if ($LASTEXITCODE -ne 0) { throw 'Meson preparation failed.' }
+if (!$CMakeDirectory -or !$NinjaDirectory) {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    if (Test-Path $vswhere) {
+        $vs = & $vswhere -latest -products '*' -property installationPath
+        if ($vs) {
+            $bundled = Join-Path $vs 'Common7/IDE/CommonExtensions/Microsoft/CMake'
+            if (!$CMakeDirectory) { $CMakeDirectory = Join-Path $bundled 'CMake/bin' }
+            if (!$NinjaDirectory) { $NinjaDirectory = Join-Path $bundled 'Ninja' }
+        }
+    }
 }
-$notices = Join-Path $sdk 'third_party/ffmpeg'
-$sources = Join-Path $notices 'sources'
-New-Item -ItemType Directory -Force $sources | Out-Null
-Copy-Item -LiteralPath $lockFile -Destination $notices -Force
-Copy-Item -LiteralPath (Join-Path $sdk 'LICENSE.txt') -Destination $notices -Force
-Copy-Item -LiteralPath (Join-Path $repository 'third_party/ffmpeg/README.md') -Destination $notices -Force
-Set-Content -LiteralPath (Join-Path $notices 'build-configuration.txt') -Value $version -Encoding utf8
-foreach ($license in @('COPYING.LGPLv3', 'COPYING.GPLv3')) {
-    $uri = "https://raw.githubusercontent.com/FFmpeg/FFmpeg/$($dependency.ffmpegRevision)/$license"
-    Invoke-WebRequest $uri -OutFile (Join-Path $notices $license)
-}
-Invoke-WebRequest "https://raw.githubusercontent.com/cisco/openh264/$($dependency.openh264Revision)/LICENSE" `
-    -OutFile (Join-Path $notices 'OpenH264-LICENSE.txt')
-$sourceArchives = @(
-    @{ name = 'ffmpeg-source.zip'; uri = "https://github.com/FFmpeg/FFmpeg/archive/$($dependency.ffmpegRevision).zip" },
-    @{ name = 'build-scripts.zip'; uri = "https://github.com/BtbN/FFmpeg-Builds/archive/$($dependency.buildScriptsRevision).zip" },
-    @{ name = 'openh264-source.zip'; uri = "https://github.com/cisco/openh264/archive/$($dependency.openh264Revision).zip" }
-)
-foreach ($source in $sourceArchives) {
-    $destination = Join-Path $sources $source.name
-    if (!(Test-Path -LiteralPath $destination)) { Invoke-WebRequest $source.uri -OutFile $destination }
-}
-Get-ChildItem -LiteralPath $sources -File | Get-FileHash -Algorithm SHA256 |
-    Select-Object @{ n = 'file'; e = { Split-Path $_.Path -Leaf } }, Hash |
-    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $notices 'source-hashes.json') -Encoding utf8
-Write-Host "FFmpeg shared SDK ready: $sdk"
+$originalPath = $env:PATH
+try {
+    $env:PATH = "$CMakeDirectory;$NinjaDirectory;$originalPath"
+    & $Bash (Join-Path $PSScriptRoot 'build_ffmpeg_minimal.sh').Replace('\', '/')
+    if ($LASTEXITCODE -ne 0) { throw 'Minimal FFmpeg build failed.' }
+} finally { $env:PATH = $originalPath }
+& $Python (Join-Path $PSScriptRoot 'ffmpeg_source_materials.py') package $repository
+if ($LASTEXITCODE -ne 0) { throw 'License/source packaging failed.' }
+Write-Host "Minimal LGPL shared FFmpeg SDK ready: $sdk"

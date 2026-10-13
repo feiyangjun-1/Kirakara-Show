@@ -1,22 +1,8 @@
 # FFmpeg is always imported as DLLs; never link static GPL/nonfree libraries.
-set(KIRAKARA_FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.deps/ffmpeg-sdk"
+set(KIRAKARA_FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.deps/ffmpeg-minimal-sdk"
     CACHE PATH "LGPL FFmpeg shared SDK (include/lib/bin)")
 if(NOT EXISTS "${KIRAKARA_FFMPEG_ROOT}/include/libavcodec/avcodec.h")
     message(FATAL_ERROR "FFmpeg SDK missing. Run tools/prepare_ffmpeg.ps1 or set KIRAKARA_FFMPEG_ROOT to an LGPL shared SDK.")
-endif()
-if(NOT EXISTS "${KIRAKARA_FFMPEG_ROOT}/bin/ffmpeg.exe")
-    message(FATAL_ERROR "FFmpeg SDK must include ffmpeg.exe for configuration/license validation.")
-endif()
-execute_process(COMMAND "${KIRAKARA_FFMPEG_ROOT}/bin/ffmpeg.exe" -version
-    OUTPUT_VARIABLE _ffmpeg_version ERROR_VARIABLE _ffmpeg_error RESULT_VARIABLE _ffmpeg_status)
-if(NOT _ffmpeg_status EQUAL 0 OR _ffmpeg_version MATCHES "--enable-(gpl|nonfree)( |\n)")
-    message(FATAL_ERROR "FFmpeg must be a working LGPL shared build without GPL/nonfree components: ${_ffmpeg_error}")
-endif()
-if(NOT _ffmpeg_version MATCHES "--enable-shared")
-    message(FATAL_ERROR "FFmpeg must be built with --enable-shared.")
-endif()
-if(NOT _ffmpeg_version MATCHES "--enable-libopenh264")
-    message(FATAL_ERROR "FFmpeg must include LGPL-compatible libopenh264 for software H.264 fallback.")
 endif()
 foreach(_component avcodec avformat avutil swscale swresample)
     file(GLOB _dll "${KIRAKARA_FFMPEG_ROOT}/bin/${_component}-*.dll")
@@ -38,6 +24,26 @@ foreach(_component avcodec avformat avutil swscale swresample)
         INTERFACE_INCLUDE_DIRECTORIES "${KIRAKARA_FFMPEG_ROOT}/include")
     list(APPEND KIRAKARA_FFMPEG_DLLS "${_dll}")
 endforeach()
+
+# Validate the DLLs themselves: no CLI, filters, or unrelated codecs need to be
+# shipped simply to check the SDK. A broad SDK is rejected at configure time.
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/ffmpeg-sdk-validation")
+try_compile(_ffmpeg_check_compiled "${CMAKE_BINARY_DIR}/ffmpeg-sdk-check-build"
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tools/ffmpeg_sdk_check.cpp"
+    LINK_LIBRARIES FFmpeg::avcodec FFmpeg::avutil
+    COPY_FILE "${CMAKE_BINARY_DIR}/ffmpeg-sdk-validation/check.exe"
+    OUTPUT_VARIABLE _ffmpeg_check_build_log)
+if(NOT _ffmpeg_check_compiled)
+    message(FATAL_ERROR "Unable to build FFmpeg SDK check: ${_ffmpeg_check_build_log}")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env
+    "PATH=${KIRAKARA_FFMPEG_ROOT}/bin;$ENV{PATH}"
+    "${CMAKE_BINARY_DIR}/ffmpeg-sdk-validation/check.exe"
+    OUTPUT_VARIABLE _ffmpeg_codecs ERROR_VARIABLE _ffmpeg_error RESULT_VARIABLE _ffmpeg_status)
+if(NOT _ffmpeg_status EQUAL 0)
+    message(FATAL_ERROR "FFmpeg must be a minimized LGPL shared SDK with the required codecs: ${_ffmpeg_error} (${_ffmpeg_status})")
+endif()
+file(WRITE "${CMAKE_BINARY_DIR}/ffmpeg-codecs.txt" "${_ffmpeg_codecs}")
 
 add_library(kirakara_ffmpeg_decode STATIC apps/show_host/media/ffmpeg_decode.cpp
     apps/show_host/cast/ffmpeg_h264_session.cpp)

@@ -28,7 +28,8 @@ Kirakara Show 自有代码使用仓库根目录中的 MIT License。以下随源
 - 默认 SDK：FFmpeg 8.1 LGPL 共享构建，许可证 LGPL-3.0-or-later。
 - 固定版本、来源、构建参数和分发要求见 [FFmpeg 依赖说明](third_party/ffmpeg/README.md)。
 - SDK 中第三方库保留各自许可证。FFmpeg DLL 与其许可及源码材料随宿主一起分发，
-  自有代码仍为 MIT；公开发布须补齐外部依赖的许可和源码材料。
+  自有代码仍为 MIT。精简 SDK 附带 dav1d、OpenH264、oneVPL、AMF/NV SDK 头文件
+  的许可及对应源码材料。
 
 软件 H.264 编码回退通过 FFmpeg 使用 Cisco OpenH264（BSD-2-Clause）。版本锁、源码和许可材料
 由 FFmpeg 准备脚本保存，FFmpeg 共享库整体仍遵循 LGPL-3.0-or-later。

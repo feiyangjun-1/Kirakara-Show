@@ -1,6 +1,6 @@
 param(
     [string]$BaselineRuntime = (Join-Path $PSScriptRoot '../../backups/2026-10-13-before-all-ffmpeg/runtime'),
-    [string]$FfmpegRuntime = (Join-Path $PSScriptRoot '../build-ffmpeg/bin'),
+    [string]$FfmpegRuntime = (Join-Path $PSScriptRoot '../build-minimal/bin'),
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '../artifacts/ffmpeg-comparison'),
     [int]$Rounds = 3,
     [int]$SampleSeconds = 12,
@@ -24,7 +24,7 @@ if (Test-Path -LiteralPath (Join-Path $output 'results.json')) {
 foreach ($dataset in $Datasets) {
     $extension = if ($dataset.StartsWith('h264')) { '.mp4' } else { '.mkv' }
     $video = Join-Path $output "media/$dataset$extension"
-    $audio = if ($dataset -eq 'h264-embedded') { '-' } else { Join-Path $output 'media/audio.wav' }
+    $audio = if ($dataset -eq 'h264-embedded') { '-' } else { Join-Path $output 'media/audio.m4a' }
     for ($round = 1; $round -le $Rounds; $round++) {
         $order = if ($round % 2) { @('baseline', $FfmpegVariant) } else { @($FfmpegVariant, 'baseline') }
         foreach ($variant in $order) {

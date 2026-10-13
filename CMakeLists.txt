@@ -671,6 +671,15 @@ if(WIN32)
         # No media, no window and no GPU required, so this runs everywhere.
         add_executable(kirakara_show_host_codec_playback_tests tests/host_codec_playback_tests.cpp)
         add_executable(kirakara_show_playback_resource_probe tools/playback_resource_probe.cpp)
+        add_executable(kirakara_show_cast_resource_probe tools/cast_resource_probe.cpp)
+        target_compile_features(kirakara_show_cast_resource_probe PRIVATE cxx_std_20)
+        target_link_libraries(kirakara_show_cast_resource_probe PRIVATE show_host pdh psapi ws2_32)
+        if(MINGW)
+            target_link_options(kirakara_show_cast_resource_probe PRIVATE
+                -municode -static -static-libgcc -static-libstdc++)
+        endif()
+        set_target_properties(kirakara_show_cast_resource_probe PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
         target_compile_features(kirakara_show_playback_resource_probe PRIVATE cxx_std_20)
         target_link_libraries(kirakara_show_playback_resource_probe PRIVATE show_host pdh psapi)
         if(MINGW)

@@ -12,6 +12,9 @@ function Encode([string[]]$Arguments) {
 foreach ($depth in @(8, 10)) {
     $pixelFormat = if ($depth -eq 10) { 'yuv420p10le' } else { 'yuv420p' }
     Encode @('-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30', '-t', '2',
+        '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8',
+        '-g', '15', '-pix_fmt', $pixelFormat, (Join-Path $OutputDirectory "vp9-$depth.webm"))
+    Encode @('-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30', '-t', '2',
         '-an', '-c:v', 'libaom-av1', '-cpu-used', '8', '-crf', '40',
         '-pix_fmt', $pixelFormat, (Join-Path $OutputDirectory "av1-$depth.mkv"))
     Encode @('-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30', '-t', '2',
@@ -21,6 +24,11 @@ foreach ($depth in @(8, 10)) {
     Encode @('-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30', '-t', '2',
         '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '15', '-bf', '3',
         '-pix_fmt', $pixelFormat, (Join-Path $OutputDirectory "h264-$depth.mp4"))
+}
+foreach ($codec in @('pcm_s16le', 'flac', 'libmp3lame')) {
+    $extension = @{ pcm_s16le = 'wav'; flac = 'flac'; libmp3lame = 'mp3' }[$codec]
+    Encode @('-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '0.2',
+        '-c:a', $codec, (Join-Path $OutputDirectory "unsupported.$extension"))
 }
 foreach ($channels in @(1, 2, 6)) {
     Encode @('-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',

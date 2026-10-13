@@ -85,6 +85,19 @@ public:
         if (index < 0) return false;
         stream = format->streams[index];
         const auto id = stream->codecpar->codec_id;
+        // The product deliberately supports this small codec set even when a
+        // developer supplies a broader FFmpeg SDK.
+        switch (id) {
+        case AV_CODEC_ID_H264:
+        case AV_CODEC_ID_HEVC:
+        case AV_CODEC_ID_VP9:
+        case AV_CODEC_ID_AV1:
+        case AV_CODEC_ID_AAC:
+        case AV_CODEC_ID_OPUS:
+            break;
+        default:
+            return false;
+        }
         if (restricted && id != AV_CODEC_ID_AV1 && id != AV_CODEC_ID_HEVC) return false;
         const AVCodec* decoder = nullptr;
         if (id == AV_CODEC_ID_AV1) {

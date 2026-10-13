@@ -50,9 +50,10 @@ ctest --test-dir build --output-on-failure
 演示程序支持载入 `.lrc` / `.krl`、调整常用字幕参数和导出当前画面。视频、标题与字幕组合可
 通过 `kirakara_video_demo.exe` 验证。
 
-宿主的音视频解码统一使用 FFmpeg，支持 H.264 / AV1 / H.265 / Opus 等格式。
+宿主的音视频解码统一使用精简 LGPL FFmpeg，仅支持 H.264 / H.265 / VP9 / AV1 / AAC / Opus。
 视频默认优先 D3D11VA 硬解，设备不支持时回退软件；
 投屏 H.264/AAC 编码也使用 FFmpeg，H.264 优先硬编，软件回退采用 OpenH264。
+WAV/PCM、MP3、FLAC 等文件不再提供解码；播放器内部 PCM 处理不受影响。
 FFmpeg DLL 必须与 `show_host.dll` 一起部署，详见
 [FFmpeg 依赖说明](third_party/ffmpeg/README.md)。演示程序仍使用各自现有的媒体流程。
 

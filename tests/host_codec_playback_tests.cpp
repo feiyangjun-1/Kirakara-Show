@@ -27,7 +27,7 @@ int wmain(int argc, wchar_t** argv) {
     auto host = show_host_create();
     expect(host != nullptr, "create host");
     for (const auto* video : {L"视频与音频.webm", L"hevc-opus.mkv", L"av1-10.mkv", L"hevc-10.mp4",
-            L"h264-8.mp4", L"h264-aac.mp4"}) {
+            L"h264-8.mp4", L"h264-aac.mp4", L"vp9-8.webm"}) {
         for (const auto clock : {SHOW_CLOCK_AUDIO_MASTER, SHOW_CLOCK_VIDEO_MASTER}) {
             std::cout << "clock " << clock << ", " << std::filesystem::path(video).extension().string() << std::endl;
             const auto source = (directory / video).wstring();

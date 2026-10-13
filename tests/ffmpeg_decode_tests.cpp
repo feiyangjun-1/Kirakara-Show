@@ -155,7 +155,7 @@ int wmain(int argc, wchar_t** argv) {
     context->Release();
 
     for (const auto* name : {L"av1-8.mkv", L"av1-10.mkv", L"hevc-8.mp4", L"hevc-10.mp4",
-            L"h264-8.mp4", L"h264-10.mp4", L"h264-aac.mp4", L"视频与音频.webm"}) {
+            L"h264-8.mp4", L"h264-10.mp4", L"h264-aac.mp4", L"vp9-8.webm", L"vp9-10.webm", L"视频与音频.webm"}) {
         const auto source = (directory / name).wstring();
         for (const auto format : {MfD3D11VideoPixelFormat::bgra8, MfD3D11VideoPixelFormat::nv12}) {
             decode_video(source, format, nullptr); // Software fallback is mandatory.
@@ -185,6 +185,11 @@ int wmain(int argc, wchar_t** argv) {
         expect(energy > 1.0, "Opus is audible");
     }
     DecodedAudioBuffer missing{48000, 2, {1.0f}};
+    for (const auto* name : {L"unsupported.wav", L"unsupported.flac", L"unsupported.mp3"}) {
+        DecodedAudioBuffer rejected{48000, 2, {1.0f}};
+        expect(!decode_audio_to_float_pcm((directory / name).wstring(), rejected)
+            && rejected.samples.empty(), "unsupported codec must be rejected");
+    }
     expect(!ffmpeg_decode_audio((directory / L"missing.ogg").wstring(), missing)
         && missing.samples.empty(), "failed audio decode clears output");
     FfmpegVideoDecoder invalid;
@@ -192,6 +197,6 @@ int wmain(int argc, wchar_t** argv) {
     device->Release();
     MFShutdown();
     if (SUCCEEDED(com)) CoUninitialize();
-    std::cout << "AV1/HEVC hardware, fallback, texture, seek and Opus tests passed\n";
+    std::cout << "H264/HEVC/VP9/AV1 hardware, fallback, texture, seek and AAC/Opus tests passed\n";
     return 0;
 }
