@@ -37,9 +37,12 @@ foreach ($license in @('COPYING.LGPLv3', 'COPYING.GPLv3')) {
     $uri = "https://raw.githubusercontent.com/FFmpeg/FFmpeg/$($dependency.ffmpegRevision)/$license"
     Invoke-WebRequest $uri -OutFile (Join-Path $notices $license)
 }
+Invoke-WebRequest "https://raw.githubusercontent.com/cisco/openh264/$($dependency.openh264Revision)/LICENSE" `
+    -OutFile (Join-Path $notices 'OpenH264-LICENSE.txt')
 $sourceArchives = @(
     @{ name = 'ffmpeg-source.zip'; uri = "https://github.com/FFmpeg/FFmpeg/archive/$($dependency.ffmpegRevision).zip" },
-    @{ name = 'build-scripts.zip'; uri = "https://github.com/BtbN/FFmpeg-Builds/archive/$($dependency.buildScriptsRevision).zip" }
+    @{ name = 'build-scripts.zip'; uri = "https://github.com/BtbN/FFmpeg-Builds/archive/$($dependency.buildScriptsRevision).zip" },
+    @{ name = 'openh264-source.zip'; uri = "https://github.com/cisco/openh264/archive/$($dependency.openh264Revision).zip" }
 )
 foreach ($source in $sourceArchives) {
     $destination = Join-Path $sources $source.name

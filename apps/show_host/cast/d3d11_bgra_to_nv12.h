@@ -13,7 +13,7 @@ enum class D3D11CastFlushMode : std::uint32_t {
 
 // GPU-only color conversion boundary for the native Cast encoder. The source
 // is the renderer-owned fixed-canvas BGRA D3D11 texture; the destination is an
-// NV12 D3D11 texture suitable for MFCreateDXGISurfaceBuffer. No pixels are
+// NV12 D3D11 texture suitable for FFmpeg hardware frames. No pixels are
 // captured from a window or mapped back to the CPU.
 class D3D11BgraToNv12Converter {
 public:

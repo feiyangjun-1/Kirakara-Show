@@ -39,7 +39,7 @@ int main() {
             timestamps.push_back(pts90k);
             ready.notify_all();
         });
-    expect(started, "Microsoft AAC encoder starts");
+    expect(started, "FFmpeg native AAC encoder starts");
 
     constexpr std::size_t chunk_frames = 1024;
     std::vector<std::int16_t> silence(chunk_frames * 2U);
@@ -66,13 +66,13 @@ int main() {
     expect(AacAdtsPacketizer::append_frame(
         AacAdtsConfig{48000, 2, 2},
         frames.front().data(), frames.front().size(), adts),
-        "raw MF AAC frame receives a valid ADTS header");
+        "raw FFmpeg AAC frame receives a valid ADTS header");
     expect(adts.size() == frames.front().size() + 7U,
         "ADTS frame size includes its seven-byte header");
     expect(adts[0] == 0xFF && (adts[1] & 0xF6U) == 0xF0U,
         "ADTS sync word is present");
 
-    std::cout << "MF AAC encoder tests passed with "
+    std::cout << "FFmpeg AAC encoder tests passed with "
               << frames.size() << " frames.\n";
     return 0;
 }

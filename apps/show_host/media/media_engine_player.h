@@ -15,8 +15,6 @@
 #include <chrono>
 #include <string>
 
-#pragma comment(lib, "mf")
-#pragma comment(lib, "mfplat")
 #pragma comment(lib, "ole32")
 #pragma comment(lib, "oleaut32")
 

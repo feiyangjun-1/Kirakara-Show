@@ -361,7 +361,6 @@ void stage_thread_main(ShowHost* host) {
     StageThreadDpiAwareness dpi_awareness;
     StageThreadSchedulingScope scheduling_scope;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const auto mf = MFStartup(MF_VERSION);
     const auto instance = GetModuleHandleW(nullptr);
 
     WNDCLASSW stage_class{};
@@ -391,7 +390,7 @@ void stage_thread_main(ShowHost* host) {
         GetStockObject(BLACK_BRUSH));
     RegisterClassW(&media_clock_class);
 
-    host->thread.startup_failed = FAILED(mf);
+    host->thread.startup_failed = false;
     if (!host->thread.startup_failed) {
         constexpr DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
         RECT window_rect{
@@ -518,7 +517,6 @@ void stage_thread_main(ShowHost* host) {
         host->output_transition.stage_output_lease.release(StageOutputMode::physical_display));
     host->playback.audio->close();
     host->playback.player.close();
-    if (SUCCEEDED(mf)) MFShutdown();
     CoUninitialize();
 }
 

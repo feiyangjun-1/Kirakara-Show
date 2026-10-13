@@ -1,5 +1,5 @@
 // Cast session implementation. The Cast worker owns frame scheduling and the
-// COM/MF/D3D pipeline; the host thread only coordinates shared output state.
+// COM/FFmpeg/D3D pipeline; the host thread only coordinates shared output state.
 
 #include "cast_session.h"
 
@@ -328,12 +328,10 @@ void cast_load_keepalive_main(
         CastSession& cast,
         kirakara::show::win32::StageCanvas) {
     const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    const auto mf_result = MFStartup(MF_VERSION);
     cast.worker_startup_failed.store(
-        FAILED(com_result) || FAILED(mf_result), std::memory_order_release);
+        FAILED(com_result), std::memory_order_release);
     SetEvent(cast.worker_ready_event);
     if (cast.worker_startup_failed.load(std::memory_order_acquire)) {
-        if (SUCCEEDED(mf_result)) MFShutdown();
         if (SUCCEEDED(com_result)) CoUninitialize();
         return;
     }
@@ -505,7 +503,6 @@ void cast_load_keepalive_main(
     if (previous_priority != THREAD_PRIORITY_ERROR_RETURN) {
         static_cast<void>(SetThreadPriority(GetCurrentThread(), previous_priority));
     }
-    MFShutdown();
     CoUninitialize();
 }
 

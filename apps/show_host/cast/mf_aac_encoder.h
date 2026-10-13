@@ -8,11 +8,11 @@
 struct MfAacEncoderConfig {
     std::uint32_t sample_rate{48000};
     std::uint32_t channels{2};
-    // Microsoft AAC MFT expresses its supported bit rates in bytes/second.
+    // Retain the existing API unit; FFmpeg receives this value multiplied by 8.
     std::uint32_t average_bytes_per_second{20000};  // 160 kbit/s
 };
 
-// Asynchronous wrapper around the Windows Media Foundation AAC-LC encoder.
+// Asynchronous wrapper around FFmpeg's native LGPL AAC-LC encoder.
 // Input is the final interleaved 16-bit PCM produced by the App audio chain;
 // output is one raw AAC frame per callback (no ADTS header). The callback data
 // is borrowed and remains valid only until the callback returns.

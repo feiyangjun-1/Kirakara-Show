@@ -551,7 +551,7 @@ int wmain(int argc, wchar_t** argv) {
                 && capability.nv12_plane_uavs.supported
                 && capability.nv12_video_processor.supported
                 && capability.dxgi_h264_encoder.supported
-                && capability.encoder_retains_samples_async,
+                && capability.tracked_sample_release.supported,
             "active backend A must publish every required capability");
     } else {
         expect(capability.backend == SHOW_CAST_BACKEND_COMPATIBILITY_C,
@@ -796,7 +796,8 @@ int wmain(int argc, wchar_t** argv) {
         saw_normalize_relation = saw_normalize_relation
             || (event.event == SHOW_CAST_EVENT_NORMALIZE
                 && event.related_id != 0
-                && event.value != 0);
+                && event.duration_qpc > 0
+                && event.value >= 0 && event.value <= 2);
         saw_encoder_payload = saw_encoder_payload
             || (event.event == SHOW_CAST_EVENT_ENCODER_OUTPUT
                 && event.related_id != 0

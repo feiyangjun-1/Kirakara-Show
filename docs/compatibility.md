@@ -13,7 +13,7 @@ Kirakara Show 当前主要面向 Windows 10/11 x64：
 | Opus 音频解码 | 可用，支持 Ogg / WebM，转换为立体声浮点 PCM |
 | 实体第二屏 | 可用 |
 | Flutter GPU 预览 | 可用，需要 Kirakara-App 对应接入 |
-| H.264/AAC Cast | 可用，具体编码能力取决于系统与显卡驱动 |
+| H.264/AAC Cast | FFmpeg 编码；NVENC/AMF/QSV 硬编优先，OpenH264 软件回退，AAC-LC 原生编码 |
 | 非 Windows 平台 | 尚未支持完整构建与播放 |
 
 ## 建议测试的媒体
@@ -25,6 +25,10 @@ Kirakara Show 当前主要面向 Windows 10/11 x64：
 BGRA/NV12 GPU 纹理内容、跳转、延迟帧排空、Opus pre-skip 和尾部裁剪。
 宿主测试另行验证 H.264/AV1/H.265 与内嵌 AAC/Opus 的加载、播放、暂停、跳转和自然结束，
 同时覆盖音频主时钟和视频主时钟，不依赖 Windows Media Engine 的对应 codec pack。
+
+编码验证增加 MPEG-TS 回读测试：验证硬编/软件 H.264、强制 IDR、非 1024 对齐的 PCM 聚合、
+AAC-LC、停止排空、时间戳和图像/音频内容。`kirakara_show_mf_h264_encoder_probe` 保留旧工具名，
+实际已改为 FFmpeg 编码探针，支持 `--software`、`--readback`、`--adapter=名称`。
 
 接入新设备或准备发布时，建议至少测试：
 

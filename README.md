@@ -52,6 +52,7 @@ ctest --test-dir build --output-on-failure
 
 宿主的音视频解码统一使用 FFmpeg，支持 H.264 / AV1 / H.265 / Opus 等格式。
 视频默认优先 D3D11VA 硬解，设备不支持时回退软件；
+投屏 H.264/AAC 编码也使用 FFmpeg，H.264 优先硬编，软件回退采用 OpenH264。
 FFmpeg DLL 必须与 `show_host.dll` 一起部署，详见
 [FFmpeg 依赖说明](third_party/ffmpeg/README.md)。演示程序仍使用各自现有的媒体流程。
 

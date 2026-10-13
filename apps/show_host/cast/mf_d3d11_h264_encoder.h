@@ -47,14 +47,15 @@ struct MfD3D11H264EncoderConfig {
     MfH264EncoderInputFormat input_format{MfH264EncoderInputFormat::bgra8};
 };
 
-// Native H.264 encoder for the fixed-canvas Cast Stage texture. Hardware MFTs
+// FFmpeg H.264 encoder for the fixed-canvas Cast Stage texture. NVENC/AMF
 // consume GPU NV12 textures directly by default. The explicit hardware
-// readback mode is a compatibility fallback for drivers that reject DXGI
-// samples; the software fallback uses the same bounded NV12 readback. No path
+// readback mode (also used by QSV) is a compatibility fallback for drivers
+// that reject shared D3D11 input. OpenH264 software fallback uses the same
+// bounded NV12 readback. No path
 // captures an HWND.
 class MfD3D11H264Encoder {
 public:
-    // `data` is a borrowed view of the MFT output buffer and remains valid
+    // `data` is a borrowed view of the FFmpeg output packet and remains valid
     // only for the duration of the callback. Consumers must finish reading or
     // copy it before returning; the production Cast muxer consumes it
     // synchronously and therefore avoids an intermediate access-unit copy.
@@ -110,7 +111,7 @@ public:
         bool force_keyframe = false);
 
     // Submit an immutable NV12 texture owned by the caller's retention token.
-    // The token remains alive through the asynchronous MFT sample callback (or
+    // The token remains alive through FFmpeg's refcounted hardware frame (or
     // software readback), so pooled textures cannot be reused too early.
     [[nodiscard]] bool submit_nv12_texture(
         void* nv12_texture,

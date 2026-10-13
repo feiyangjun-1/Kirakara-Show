@@ -1,3 +1,4 @@
+#include "ffmpeg_h264_session.h"
 #include "../media/ffmpeg_decode.h"
 #include "d3d11_cast_capabilities.h"
 
@@ -20,29 +21,7 @@
 #include <windows.h>
 #include <winternl.h>
 
-#ifndef __IMFTrackedSample_INTERFACE_DEFINED__
-struct IMFTrackedSample : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE SetAllocator(
-        IMFAsyncCallback* sample_allocator,
-        IUnknown* state) = 0;
-};
-#endif
-
-extern "C" HRESULT WINAPI MFCreateTrackedSample(IMFTrackedSample** sample);
-
 namespace {
-
-// MinGW-w64 8 omits these declarations even though the APIs are available on
-// every Windows version supported by Show. Keep private equivalents so the
-// capability probe stays buildable with both the production MSYS2 toolchain
-// and the older cross-check toolchain used in CI.
-constexpr GUID kReadwriteEnableHardwareTransforms{
-    0xa634a91c, 0x822b, 0x41b9,
-    {0xa4, 0x94, 0x4d, 0xe4, 0x64, 0x36, 0x12, 0xb0}};
-constexpr HRESULT kMfNoEventsAvailable = static_cast<HRESULT>(
-    static_cast<std::int32_t>(0xc00d3e80U));
-constexpr HRESULT kMfEndOfStream = static_cast<HRESULT>(
-    static_cast<std::int32_t>(0xc00d3e84U));
 
 template <typename T>
 void release(T*& value) noexcept {
@@ -51,64 +30,6 @@ void release(T*& value) noexcept {
         value = nullptr;
     }
 }
-
-class TrackedReleaseCallback final : public IMFAsyncCallback {
-public:
-    TrackedReleaseCallback() noexcept
-        : released_(CreateEventW(nullptr, TRUE, FALSE, nullptr)),
-          creation_error_(released_ ? ERROR_SUCCESS : GetLastError()) {}
-
-    [[nodiscard]] HRESULT creation_result() const noexcept {
-        return released_
-            ? S_OK
-            : HRESULT_FROM_WIN32(
-                creation_error_ ? creation_error_ : ERROR_INVALID_HANDLE);
-    }
-
-    [[nodiscard]] DWORD wait(DWORD timeout_ms) const noexcept {
-        return released_
-            ? WaitForSingleObject(released_, timeout_ms) : WAIT_FAILED;
-    }
-
-    STDMETHODIMP QueryInterface(REFIID iid, void** value) override {
-        if (!value) return E_POINTER;
-        *value = nullptr;
-        if (iid == __uuidof(IUnknown) || iid == __uuidof(IMFAsyncCallback)) {
-            *value = static_cast<IMFAsyncCallback*>(this);
-            AddRef();
-            return S_OK;
-        }
-        return E_NOINTERFACE;
-    }
-
-    STDMETHODIMP_(ULONG) AddRef() override {
-        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-
-    STDMETHODIMP_(ULONG) Release() override {
-        const auto remaining = references_.fetch_sub(
-            1, std::memory_order_acq_rel) - 1;
-        if (remaining == 0) delete this;
-        return remaining;
-    }
-
-    STDMETHODIMP GetParameters(DWORD*, DWORD*) override {
-        return E_NOTIMPL;
-    }
-
-    STDMETHODIMP Invoke(IMFAsyncResult*) override {
-        if (released_) SetEvent(released_);
-        return S_OK;
-    }
-
-private:
-    ~TrackedReleaseCallback() {
-        if (released_) CloseHandle(released_);
-    }
-    std::atomic<ULONG> references_{1};
-    HANDLE released_{};
-    DWORD creation_error_{};
-};
 
 D3D11CastCapabilityCheck check(HRESULT result) noexcept {
     return D3D11CastCapabilityCheck{
@@ -370,189 +291,31 @@ HRESULT probe_native_nv12_source(ID3D11Device* device, const wchar_t* source) {
     release(owner);
     return result;
 }
-IMFMediaType* video_type(
-        REFGUID subtype,
+HRESULT probe_h264_surface(ID3D11Device* device,ID3D11Texture2D* texture,
         const D3D11CastCapabilityProbeOptions& options,
-        bool encoded) {
-    IMFMediaType* type{};
-    if (FAILED(MFCreateMediaType(&type))) return nullptr;
-    auto hr = type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-    if (SUCCEEDED(hr)) hr = type->SetGUID(MF_MT_SUBTYPE, subtype);
-    if (SUCCEEDED(hr)) {
-        hr = MFSetAttributeSize(
-            type, MF_MT_FRAME_SIZE, options.width, options.height);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = MFSetAttributeRatio(type, MF_MT_FRAME_RATE,
-            options.frame_rate_num, options.frame_rate_den);
-    }
-    if (SUCCEEDED(hr)) hr = MFSetAttributeRatio(
-        type, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-    if (SUCCEEDED(hr)) hr = type->SetUINT32(
-        MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-    if (SUCCEEDED(hr) && encoded) {
-        hr = type->SetUINT32(MF_MT_AVG_BITRATE, 6000000);
-    }
-    if (FAILED(hr)) release(type);
-    return type;
-}
-
-HRESULT wait_for_need_input(
-        IMFMediaEventGenerator* events,
-        std::chrono::milliseconds timeout) {
-    if (!events) return E_POINTER;
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        IMFMediaEvent* event{};
-        const auto result = events->GetEvent(MF_EVENT_FLAG_NO_WAIT, &event);
-        if (result == kMfNoEventsAvailable) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
-        }
-        if (FAILED(result)) return result;
-        MediaEventType type{};
-        HRESULT status{};
-        auto hr = event->GetType(&type);
-        if (SUCCEEDED(hr)) hr = event->GetStatus(&status);
-        release(event);
-        if (FAILED(hr)) return hr;
-        if (FAILED(status)) return status;
-        if (type == METransformNeedInput) return S_OK;
-    }
-    return MF_E_NOTACCEPTING;
-}
-
-HRESULT probe_h264_surface(
-        ID3D11Device* device,
-        ID3D11Texture2D* texture,
-        const D3D11CastCapabilityProbeOptions& options,
-        D3D11CastCapabilityCheck* tracked_release,
-        bool* retained_asynchronously) {
+        D3D11CastCapabilityCheck* tracked_release,bool* retained_asynchronously) {
     if (!device || !texture) return E_POINTER;
-    if (tracked_release) *tracked_release = {};
-    if (retained_asynchronously) *retained_asynchronously = false;
-    IMFDXGIDeviceManager* manager{};
-    UINT reset_token{};
-    auto hr = MFCreateDXGIDeviceManager(&reset_token, &manager);
-    if (SUCCEEDED(hr)) hr = manager->ResetDevice(device, reset_token);
-
-    MFT_REGISTER_TYPE_INFO input_info{MFMediaType_Video, MFVideoFormat_NV12};
-    MFT_REGISTER_TYPE_INFO output_info{MFMediaType_Video, MFVideoFormat_H264};
-    IMFActivate** activations{};
-    UINT activation_count{};
-    if (SUCCEEDED(hr)) {
-        hr = MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
-            MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
-            &input_info, &output_info, &activations, &activation_count);
-    }
-    HRESULT last = FAILED(hr) ? hr : MF_E_TOPO_CODEC_NOT_FOUND;
-    for (UINT index = 0; index < activation_count; ++index) {
-        IMFTransform* encoder{};
-        IMFMediaEventGenerator* events{};
-        IMFAttributes* attributes{};
-        hr = activations[index]->ActivateObject(IID_PPV_ARGS(&encoder));
-        if (SUCCEEDED(hr)) hr = encoder->GetAttributes(&attributes);
-        UINT32 asynchronous{};
-        UINT32 d3d11_aware{};
-        if (SUCCEEDED(hr)) {
-            static_cast<void>(attributes->GetUINT32(
-                MF_TRANSFORM_ASYNC, &asynchronous));
-            static_cast<void>(attributes->GetUINT32(
-                MF_SA_D3D11_AWARE, &d3d11_aware));
-            if (!asynchronous || !d3d11_aware) hr = E_NOINTERFACE;
-        }
-        if (SUCCEEDED(hr)) hr = attributes->SetUINT32(
-            MF_TRANSFORM_ASYNC_UNLOCK, TRUE);
-        if (SUCCEEDED(hr)) hr = encoder->ProcessMessage(
-            MFT_MESSAGE_SET_D3D_MANAGER,
-            reinterpret_cast<ULONG_PTR>(manager));
-        auto* output_type = video_type(MFVideoFormat_H264, options, true);
-        auto* input_type = video_type(MFVideoFormat_NV12, options, false);
-        if (SUCCEEDED(hr)) hr = output_type
-            ? encoder->SetOutputType(0, output_type, 0) : E_OUTOFMEMORY;
-        if (SUCCEEDED(hr)) hr = input_type
-            ? encoder->SetInputType(0, input_type, 0) : E_OUTOFMEMORY;
-        if (SUCCEEDED(hr)) {
-            hr = encoder->QueryInterface(IID_PPV_ARGS(&events));
-        }
-        if (SUCCEEDED(hr)) hr = encoder->ProcessMessage(
-            MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-        if (SUCCEEDED(hr)) hr = encoder->ProcessMessage(
-            MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-        if (SUCCEEDED(hr)) {
-            hr = wait_for_need_input(events, std::chrono::milliseconds(500));
-        }
-        IMFMediaBuffer* buffer{};
-        IMFSample* sample{};
-        IMFTrackedSample* tracked{};
-        TrackedReleaseCallback* release_callback{};
-        if (SUCCEEDED(hr)) {
-            hr = MFCreateDXGISurfaceBuffer(
-                __uuidof(ID3D11Texture2D), texture, 0, FALSE, &buffer);
-        }
-        if (SUCCEEDED(hr)) {
-            release_callback = new (std::nothrow) TrackedReleaseCallback();
-            if (!release_callback) {
-                hr = E_OUTOFMEMORY;
-            } else {
-                hr = release_callback->creation_result();
-            }
-        }
-        if (SUCCEEDED(hr)) hr = MFCreateTrackedSample(&tracked);
-        if (SUCCEEDED(hr)) {
-            hr = tracked->QueryInterface(IID_PPV_ARGS(&sample));
-        }
-        if (SUCCEEDED(hr)) {
-            hr = tracked->SetAllocator(release_callback, nullptr);
-        }
-        if (SUCCEEDED(hr)) hr = sample->AddBuffer(buffer);
-        if (SUCCEEDED(hr)) hr = sample->SetSampleTime(0);
-        if (SUCCEEDED(hr)) hr = sample->SetSampleDuration(
-            static_cast<LONGLONG>(10000000ULL
-                * options.frame_rate_den / options.frame_rate_num));
-        if (SUCCEEDED(hr)) hr = encoder->ProcessInput(0, sample, 0);
-        last = hr;
-
-        release(sample);
-        release(tracked);
-        release(buffer);
-        const bool async_retention = SUCCEEDED(last) && release_callback
-            && release_callback->wait(0) == WAIT_TIMEOUT;
-        if (encoder) {
-            static_cast<void>(encoder->ProcessMessage(
-                MFT_MESSAGE_COMMAND_FLUSH, 0));
-            static_cast<void>(encoder->ProcessMessage(
-                MFT_MESSAGE_NOTIFY_END_STREAMING, 0));
-            static_cast<void>(encoder->ProcessMessage(
-                MFT_MESSAGE_SET_D3D_MANAGER, 0));
-        }
-        release(input_type);
-        release(output_type);
-        release(attributes);
-        release(events);
-        release(encoder);
-        HRESULT release_result = FAILED(last) ? last : E_FAIL;
-        if (SUCCEEDED(last) && release_callback) {
-            release_result = release_callback->wait(500)
-                    == WAIT_OBJECT_0
-                ? S_OK : HRESULT_FROM_WIN32(ERROR_TIMEOUT);
-        }
-        if (tracked_release) *tracked_release = check(release_result);
-        if (retained_asynchronously) {
-            *retained_asynchronously = async_retention;
-        }
-        release(release_callback);
-        if (SUCCEEDED(last) && SUCCEEDED(release_result)) break;
-        if (SUCCEEDED(last)) last = release_result;
-    }
-    for (UINT index = 0; index < activation_count; ++index) {
-        release(activations[index]);
-    }
-    CoTaskMemFree(activations);
-    release(manager);
-    return last;
+    if (tracked_release) *tracked_release={};
+    if (retained_asynchronously) *retained_asynchronously=false;
+    MfD3D11H264EncoderConfig config;
+    config.width=options.width; config.height=options.height;
+    config.frame_rate_num=options.frame_rate_num; config.frame_rate_den=options.frame_rate_den;
+    config.gop_size_frames=options.frame_rate_num/options.frame_rate_den;
+    config.input_format=MfH264EncoderInputFormat::nv12;
+    texture->AddRef();
+    auto token=std::shared_ptr<void>(texture,[](void* value) { static_cast<ID3D11Texture2D*>(value)->Release(); });
+    std::weak_ptr<void> released=token;
+    auto session=std::make_unique<FfmpegH264Session>();
+    bool succeeded=session->open(device,config,true,true);
+    if (succeeded) succeeded=session->send(texture,token,0,
+        static_cast<std::int64_t>(10000000ULL*options.frame_rate_den/options.frame_rate_num),true)>=0;
+    if (succeeded && retained_asynchronously) *retained_asynchronously=session->input_retained_async();
+    if (succeeded) succeeded=session->receive({})>=0;
+    session.reset(); token.reset();
+    const auto result=succeeded && released.expired() ? S_OK : E_FAIL;
+    if (tracked_release) *tracked_release=check(result);
+    return result;
 }
-
 }  // namespace
 
 D3D11CastCapabilityReport D3D11CastCapabilityProbe::run(

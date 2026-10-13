@@ -63,6 +63,11 @@ H.264 / AV1 / H.265 / Opus 回归样片使用 `tools/make_codec_fixtures.ps1` �
 相同媒体/音轨/1080p 输出对比两个 DLL 版本，交替运行三轮，预热四秒后各采样十二秒。
 本机视频占用实测记录位于 `artifacts/ffmpeg-comparison`。
 
+投屏编码也统一到 FFmpeg。`kirakara_show_ffmpeg_encode_roundtrip_tests` 会生成并回读
+软件/自动 H.264 + AAC MPEG-TS；手动硬编探针可用 `kirakara_show_mf_h264_encoder_probe`。
+这个工具保留历史名称，已移除 MFT 枚举；编码实现文件的 `mf_` 前缀同样仅为调用兼容。
+具体路径、许可证和实机验证见 [FFmpeg 投屏编码](ffmpeg-encoding.md)。
+
 仓库不附带测试视频。安装 FFmpeg 后可以生成两组短视频和音频：
 
 ```powershell

@@ -515,6 +515,24 @@ if(WIN32)
         add_test(NAME kirakara_show_mf_aac_encoder_tests
             COMMAND kirakara_show_mf_aac_encoder_tests)
 
+        add_executable(kirakara_show_ffmpeg_encode_roundtrip_tests
+            tests/ffmpeg_encode_roundtrip_tests.cpp
+            apps/show_host/cast/mf_d3d11_h264_encoder.cpp
+            apps/show_host/cast/mf_aac_encoder.cpp
+            apps/show_host/cast/cast_nv12_surface_pool.cpp
+            apps/show_host/cast/cast_pipeline_diagnostics.cpp
+            apps/show_host/cast/d3d11_bgra_to_nv12.cpp
+            apps/show_host/cast/mpeg_ts_muxer.cpp
+            apps/show_host/cast/aac_adts_packetizer.cpp)
+        target_compile_features(kirakara_show_ffmpeg_encode_roundtrip_tests PRIVATE cxx_std_20)
+        target_link_libraries(kirakara_show_ffmpeg_encode_roundtrip_tests PRIVATE d3d11 dxgi ole32 uuid)
+        if(MINGW)
+            target_link_options(kirakara_show_ffmpeg_encode_roundtrip_tests PRIVATE
+                -municode -static -static-libgcc -static-libstdc++)
+        endif()
+        add_test(NAME kirakara_show_ffmpeg_encode_roundtrip_tests
+            COMMAND kirakara_show_ffmpeg_encode_roundtrip_tests "${CMAKE_BINARY_DIR}/encoded-roundtrip")
+
         add_test(NAME kirakara_show_render_smoke
             COMMAND kirakara_show_demo
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/dom-parity.lrc"
@@ -592,7 +610,7 @@ if(WIN32)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/signalsmith-stretch>)
     target_link_libraries(show_host PRIVATE
-        Kirakara::ShowWin32 d2d1 d3d11 dxgi dwrite mf mfplat mfreadwrite mfuuid
+        Kirakara::ShowWin32 d2d1 d3d11 dxgi dwrite mfuuid
         advapi32 ole32 oleaut32 quartz shlwapi strmiids uuid winmm dsound
         ws2_32)
     if(MINGW)
@@ -695,7 +713,7 @@ if(WIN32)
         # move host code between translation units must not change it, so every
         # test run compares the built DLL against a committed baseline.
         # Regenerate intentionally with tools/show_host_abi.ps1 -Update.
-        find_program(KIRAKARA_POWERSHELL NAMES powershell.exe)
+        find_program(KIRAKARA_POWERSHELL NAMES pwsh.exe powershell.exe)
         if(WIN32 AND KIRAKARA_POWERSHELL)
             if(MSVC)
                 get_filename_component(_msvc_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
@@ -722,7 +740,9 @@ if(WIN32)
     get_property(_show_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     foreach(_show_target IN LISTS _show_targets)
         get_target_property(_show_sources ${_show_target} SOURCES)
-        if("apps/show_host/cast/d3d11_cast_capabilities.cpp" IN_LIST _show_sources)
+        if("apps/show_host/cast/d3d11_cast_capabilities.cpp" IN_LIST _show_sources
+            OR "apps/show_host/cast/mf_d3d11_h264_encoder.cpp" IN_LIST _show_sources
+            OR "apps/show_host/cast/mf_aac_encoder.cpp" IN_LIST _show_sources)
             kirakara_link_ffmpeg(${_show_target})
         endif()
     endforeach()
